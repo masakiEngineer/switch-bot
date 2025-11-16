@@ -165,45 +165,77 @@ get_schedules()
 remove_schedule(index)
 ```
 
-## Railway.appへのデプロイ（常時稼働）
+## Oracle Cloud Always Free Tierへのデプロイ（常時稼働・完全無料）
 
-Railway.appの無料枠を使って、ボットを24時間稼働させることができます。
+Oracle Cloud Always Free Tierを使って、ボットを**完全無料で24時間365日**稼働させることができます。
 
-### 1. 前提条件
+### 特徴
+- **完全無料**（Always Free枠はずっと無料）
+- **24時間365日稼働**
+- **期限なし**
 
-- GitHubアカウント
-- Railway.appアカウント（https://railway.app/ でGitHubアカウントでサインアップ）
+### 1. Oracle Cloudアカウント作成
 
-### 2. GitHubにコードをプッシュ
+1. **Oracle Cloudにアクセス**: https://www.oracle.com/cloud/free/
+2. **Start for free** をクリック
+3. アカウント情報を入力して登録（クレジットカード登録が必要ですが、Always Free枠は課金されません）
+
+### 2. VM（仮想マシン）の作成
+
+1. **Oracle Cloudコンソール**にログイン
+2. **Compute** > **Instances** に移動
+3. **Create Instance** をクリック
+4. 以下の設定で作成：
+   - **Name**: switchbot-server（任意）
+   - **Image**: Ubuntu 22.04（または最新のUbuntu）
+   - **Shape**: VM.Standard.E2.1.Micro（Always Free対象）
+   - **SSH Keys**: SSH公開鍵をアップロードまたは自動生成
+5. **Create** をクリック
+
+### 3. ファイアウォール設定（任意）
+
+SSH接続のみ必要なので、デフォルト設定でOKです。
+
+### 4. VMにSSH接続
 
 ```bash
-# Gitリポジトリを初期化（まだの場合）
-git init
-git add .
-git commit -m "Initial commit"
+# Windows（Git Bash、PowerShell、またはWSL）
+ssh -i path/to/private-key ubuntu@あなたのVMのパブリックIP
 
-# GitHubにリポジトリを作成してプッシュ
-git remote add origin https://github.com/あなたのユーザー名/switchbot.git
-git branch -M main
-git push -u origin main
+# 例
+ssh -i ~/.ssh/oracle_vm_key ubuntu@123.456.789.012
 ```
 
-### 3. Railway.appでデプロイ
+### 5. セットアップスクリプトを実行
 
-1. **Railway.appにログイン**: https://railway.app/
-2. **New Project** をクリック
-3. **Deploy from GitHub repo** を選択
-4. **GitHubリポジトリ**を選択
-5. **Deploy Now** をクリック
+VMにログインしたら、以下のコマンドを実行：
 
-### 4. 環境変数の設定
+```bash
+# セットアップスクリプトをダウンロード
+wget https://raw.githubusercontent.com/masakiEngineer/switch-bot/main/setup_oracle.sh
 
-Railwayのプロジェクトページで：
+# 実行権限を付与
+chmod +x setup_oracle.sh
 
-1. **Variables** タブを開く
-2. 以下の環境変数を追加：
-
+# スクリプトを実行
+./setup_oracle.sh
 ```
+
+スクリプトが以下を自動で行います：
+1. システムアップデート
+2. Python3とgitのインストール
+3. リポジトリのクローン
+4. 仮想環境の作成
+5. パッケージのインストール
+6. 環境変数ファイルの作成（手動入力が必要）
+7. systemdサービスとして登録
+
+### 6. 環境変数の設定
+
+セットアップスクリプト実行中に`.env`ファイルの編集が求められます。
+以下の内容を入力してください：
+
+```env
 SLACK_BOT_TOKEN=xoxb-your-slack-bot-token
 SLACK_CHANNEL_ID=C0123456789
 SWITCH_BOT_TOKEN=your-switchbot-token
@@ -211,23 +243,67 @@ SWITCH_BOT_CLIENT_SECRET=your-switchbot-secret
 OPENAI_API_KEY=sk-your-openai-api-key
 ```
 
-### 5. デプロイ完了
+保存方法（nanoエディタ）：
+1. 内容を入力
+2. `Ctrl + O` で保存
+3. `Enter` で確認
+4. `Ctrl + X` で終了
 
-環境変数を設定すると、自動的に再デプロイされ、ボットが起動します。
-**Deployments** タブでログを確認できます。
+### 7. サービスの確認
 
-### 6. 無料枠について
+セットアップが完了したら、サービスが起動しているか確認：
 
-Railway.appの無料枠：
-- **月500時間**（約20日分）の実行時間
-- 無料枠を超えると自動停止
-- クレジットカード登録で$5/月の無料クレジット付与
+```bash
+# サービスの状態を確認
+sudo systemctl status switchbot-slack
+
+# リアルタイムでログを確認
+sudo journalctl -u switchbot-slack -f
+```
 
 ### デプロイ後のメンテナンス
 
-- **ログ確認**: Railwayのダッシュボード > Deployments > Logs
-- **再起動**: Deployments > 右上の3点メニュー > Restart
-- **環境変数の変更**: Variables タブで編集
+```bash
+# サービスの再起動
+sudo systemctl restart switchbot-slack
+
+# サービスの停止
+sudo systemctl stop switchbot-slack
+
+# サービスの起動
+sudo systemctl start switchbot-slack
+
+# ログ確認
+sudo journalctl -u switchbot-slack -f
+
+# 環境変数の編集
+nano ~/switch-bot/.env
+sudo systemctl restart switchbot-slack  # 編集後は再起動が必要
+```
+
+### Oracle Cloud固有のトラブルシューティング
+
+#### サービスが起動しない場合
+
+```bash
+# ログを確認
+sudo journalctl -u switchbot-slack -n 50
+
+# 手動で起動してエラーを確認
+cd ~/switch-bot
+source venv/bin/activate
+python slack_bot.py
+```
+
+#### 環境変数が正しく読み込まれない場合
+
+```bash
+# .envファイルの内容を確認
+cat ~/switch-bot/.env
+
+# パーミッションを確認
+ls -la ~/switch-bot/.env
+```
 
 ## トラブルシューティング
 
@@ -245,11 +321,3 @@ Railway.appの無料枠：
 1. slack_bot.pyが起動しているか確認
 2. schedules.jsonが正しく保存されているか確認
 3. 時刻形式がHH:MM（例：07:00）か確認
-
-## ライセンス
-
-MIT License
-
-## 作者
-
-Created with Claude Code
